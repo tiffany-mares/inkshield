@@ -1,0 +1,42 @@
+# Nightly pg_dump of the self-hosted Postgres, gzipped and streamed straight
+# to the existing S3 bucket (no AWS credentials needed — the pod uses the EC2
+# instance role via IMDS, same as the ml-service's boto3 uploads).
+# Bucket + region come from the app-config ConfigMap (S3_BUCKET,
+# AWS_DEFAULT_REGION); DB credentials from the postgres-admin secret.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+spec:
+  schedule: "17 9 * * *" # daily, 09:17 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              envFrom:
+                - configMapRef:
+                    name: app-config
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef: { name: postgres-admin, key: POSTGRES_USER }
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef: { name: postgres-admin, key: POSTGRES_PASSWORD }
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef: { name: postgres-admin, key: POSTGRES_DB }
+              command: ["/bin/sh", "-c"]
+              args:
+                - apk add --no-cache aws-cli >/dev/null &&
+                  pg_dump | gzip | aws s3 cp - "s3://$S3_BUCKET/backups/inkshield-$(date +%F).sql.gz"

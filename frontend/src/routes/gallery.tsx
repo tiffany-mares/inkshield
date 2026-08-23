@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useInView } from "framer-motion";
 import { Header } from "@/components/Header";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { cn } from "@/lib/utils";
 import { fetchGallery, like, type GalleryImage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -16,6 +17,7 @@ function GalleryPage() {
   const [sort, setSort] = useState<SortOption>("recent");
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   function reload(s: SortOption) {
     fetchGallery(s)
@@ -45,8 +47,7 @@ function GalleryPage() {
         <div className="grid lg:grid-cols-12 gap-10 mb-14">
           <div className="lg:col-span-3">
             <div className="font-mono text-xs uppercase tracking-[0.3em] text-lime flex items-center gap-3">
-              <span className="w-8 h-px bg-lime" />
-              § gallery
+              <span className="w-8 h-px bg-lime" />§ gallery
             </div>
           </div>
           <div className="lg:col-span-9">
@@ -93,7 +94,7 @@ function GalleryPage() {
                 className="border border-border bg-background/40 flex flex-col hover-lift"
               >
                 {img.url ? (
-                  <AnimatedGalleryImage src={img.url} />
+                  <AnimatedGalleryImage src={img.url} onExpand={() => setExpanded(img.url)} />
                 ) : (
                   <div className="aspect-square bg-ink" />
                 )}
@@ -115,6 +116,8 @@ function GalleryPage() {
             ))}
           </div>
         )}
+
+        <ImageLightbox src={expanded} onClose={() => setExpanded(null)} />
       </main>
     </div>
   );
@@ -125,23 +128,30 @@ function GalleryPage() {
  * loading, the AnimatedImage effect from components/ui/image-gallery, adapted to
  * the gallery's square cards (keeps object-cover + the hover zoom).
  */
-function AnimatedGalleryImage({ src }: { src: string }) {
+function AnimatedGalleryImage({ src, onExpand }: { src: string; onExpand: () => void }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "0px 0px -8% 0px" });
   const [loaded, setLoaded] = useState(false);
 
   return (
     <div ref={ref} className="group relative aspect-square bg-ink overflow-hidden">
-      <img
-        src={src}
-        alt="Published protected image"
-        loading="lazy"
-        onLoad={() => setLoaded(true)}
-        className={cn(
-          "w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-105",
-          inView && loaded ? "opacity-100" : "opacity-0",
-        )}
-      />
+      <button
+        type="button"
+        onClick={onExpand}
+        aria-label="Expand image"
+        className="block w-full h-full cursor-zoom-in"
+      >
+        <img
+          src={src}
+          alt="Published protected image"
+          loading="lazy"
+          onLoad={() => setLoaded(true)}
+          className={cn(
+            "w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-105",
+            inView && loaded ? "opacity-100" : "opacity-0",
+          )}
+        />
+      </button>
     </div>
   );
 }

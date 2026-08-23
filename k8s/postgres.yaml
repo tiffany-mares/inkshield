@@ -1,0 +1,125 @@
+# Self-hosted Postgres for InkShield, replacing Neon (free-tier compute quota
+# kept running out because the gateway's connection pool never lets the
+# serverless compute suspend). Runs on the existing k3s node with a
+# local-path PersistentVolume.
+#
+# Requires a secret created once before applying (see k8s/RESTORE-DB.md):
+#   kubectl create secret generic postgres-admin \
+#     --from-literal=POSTGRES_USER=inkshield \
+#     --from-literal=POSTGRES_PASSWORD=<generate one> \
+#     --from-literal=POSTGRES_DB=inkshield
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+data:
+  # Runs only on first boot of an empty data dir (docker-entrypoint-initdb.d).
+  # Schema from phase2-architecture.md section 2, plus the columns the
+  # auth-service entity (User.java) has since added: nullable password_hash
+  # for OAuth accounts, and the password-reset token pair.
+  init.sql: |
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+    CREATE TABLE users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      verified BOOLEAN NOT NULL DEFAULT false,
+      verification_token TEXT,
+      reset_token TEXT,
+      reset_token_expires TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    CREATE TABLE images (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id),
+      mongo_job_id TEXT NOT NULL,
+      s3_url TEXT NOT NULL,
+      thumbnail_url TEXT,
+      is_favorite BOOLEAN DEFAULT false,
+      is_published BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX idx_images_user ON images(user_id);
+    CREATE INDEX idx_images_published ON images(is_published, created_at DESC);
+
+    CREATE TABLE likes (
+      user_id UUID NOT NULL REFERENCES users(id),
+      image_id UUID NOT NULL REFERENCES images(id),
+      created_at TIMESTAMPTZ DEFAULT now(),
+      PRIMARY KEY (user_id, image_id)
+    );
+    CREATE INDEX idx_likes_image ON likes(image_id);
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # single PVC, never run two postgres pods at once
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef:
+                name: postgres-admin
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "inkshield", "-d", "inkshield"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: init
+          configMap:
+            name: postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/Header";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import {
   fetchDashboard,
   fetchLiked,
@@ -23,6 +24,7 @@ function ProfilePage() {
   const [liked, setLiked] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     // Read localStorage directly: during SSR hydration the useAuth snapshot
@@ -66,14 +68,13 @@ function ProfilePage() {
           {/* LEFT VERTICAL NAV */}
           <aside className="lg:w-64 shrink-0 lg:sticky lg:top-24 lg:self-start lg:min-h-[calc(100vh-8rem)] flex flex-col">
             <div className="font-mono text-xs uppercase tracking-[0.3em] text-lime flex items-center gap-3 mb-5">
-              <span className="w-8 h-px bg-lime" />
-              § profile
+              <span className="w-8 h-px bg-lime" />§ profile
             </div>
-            <h1 className="font-display font-bold uppercase tracking-tight text-3xl leading-none">Profile</h1>
+            <h1 className="font-display font-bold uppercase tracking-tight text-3xl leading-none">
+              Profile
+            </h1>
             {email && (
-              <p className="mt-3 font-mono text-xs text-muted-foreground break-all">
-                {email}
-              </p>
+              <p className="mt-3 font-mono text-xs text-muted-foreground break-all">{email}</p>
             )}
 
             <nav className="mt-8 flex flex-col gap-1">
@@ -161,11 +162,18 @@ function ProfilePage() {
                   >
                     <div className="relative aspect-square bg-ink overflow-hidden">
                       {img.url ? (
-                        <img
-                          src={img.url}
-                          alt="protected artwork"
-                          className="w-full h-full object-cover"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => setExpanded(img.url)}
+                          aria-label="Expand image"
+                          className="block w-full h-full cursor-zoom-in"
+                        >
+                          <img
+                            src={img.url}
+                            alt="protected artwork"
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
                       ) : (
                         <div className="w-full h-full bg-ink" />
                       )}
@@ -173,7 +181,9 @@ function ProfilePage() {
                         <button
                           type="button"
                           onClick={() =>
-                            unlike(img.id).then(reload).catch((e) => setError(e.message))
+                            unlike(img.id)
+                              .then(reload)
+                              .catch((e) => setError(e.message))
                           }
                           className="absolute top-2 right-2 px-2 py-1 text-lg leading-none border border-magenta text-magenta bg-background/80 transition-colors hover-lift"
                           title="Unlike"
@@ -185,7 +195,9 @@ function ProfilePage() {
                         <button
                           type="button"
                           onClick={() =>
-                            toggleFavorite(img.id).then(reload).catch((e) => setError(e.message))
+                            toggleFavorite(img.id)
+                              .then(reload)
+                              .catch((e) => setError(e.message))
                           }
                           className={`absolute top-2 right-2 px-2 py-1 text-lg leading-none border transition-colors hover-lift ${
                             img.is_favorite
@@ -214,7 +226,9 @@ function ProfilePage() {
                             <button
                               type="button"
                               onClick={() =>
-                                publish(img.id).then(reload).catch((e) => setError(e.message))
+                                publish(img.id)
+                                  .then(reload)
+                                  .catch((e) => setError(e.message))
                               }
                               className="flex-1 text-center px-3 py-2 border border-border text-muted-foreground hover:border-lime hover:text-lime transition-colors uppercase tracking-widest hover-lift"
                             >
@@ -230,6 +244,8 @@ function ProfilePage() {
             )}
           </section>
         </div>
+
+        <ImageLightbox src={expanded} onClose={() => setExpanded(null)} />
       </main>
     </div>
   );
