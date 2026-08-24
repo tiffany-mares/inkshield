@@ -132,6 +132,11 @@ function AnimatedGalleryImage({ src, onExpand }: { src: string; onExpand: () => 
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "0px 0px -8% 0px" });
   const [loaded, setLoaded] = useState(false);
+  // Cached images are already complete before this mounts, so onLoad never
+  // fires — without this check every card stays at opacity 0 on a revisit.
+  const markLoaded = (img: HTMLImageElement | null) => {
+    if (img?.complete) setLoaded(true);
+  };
 
   return (
     <div ref={ref} className="group relative aspect-square bg-ink overflow-hidden">
@@ -142,6 +147,7 @@ function AnimatedGalleryImage({ src, onExpand }: { src: string; onExpand: () => 
         className="block w-full h-full cursor-zoom-in"
       >
         <img
+          ref={markLoaded}
           src={src}
           alt="Published protected image"
           loading="lazy"
