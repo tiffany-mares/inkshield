@@ -98,10 +98,7 @@ function GalleryPage() {
                 ) : (
                   <div className="aspect-square bg-ink" />
                 )}
-                <div className="p-4 flex items-center justify-between font-mono text-xs">
-                  <span className="text-muted-foreground uppercase tracking-widest">
-                    {new Date(img.created_at).toLocaleDateString()}
-                  </span>
+                <div className="p-4 flex items-center justify-end font-mono text-xs">
                   <button
                     type="button"
                     onClick={() => onLike(img.id)}
